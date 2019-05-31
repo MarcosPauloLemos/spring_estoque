@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="br.com.ithappens.mapper.PedidoEstoqueMapper">
+
+
+    <insert id="insertPedido" useGeneratedKeys="true" keyProperty="pedidoEstoque.id" keyColumn="id">
+        INSERT INTO pedido_estoque(filialid,codcliente,data,status,issaida)
+        VALUES(#{pedidoEstoque.filial.id},#{pedidoEstoque.codCliente},
+               #{pedidoEstoque.data},#{pedidoEstoque.status.id},#{pedidoEstoque.isSaida})
+    </insert>
+
+    <insert id="upsertPedido" useGeneratedKeys="true" keyProperty="pedidoEstoque.id" keyColumn="id">
+        WITH cte_pedido(t_id, t_filialId, t_codCliente, t_data, t_status, t_isSaida)
+        AS (VALUES (CAST (#{pedidoEstoque.id} AS int4),#{pedidoEstoque.filial.id},#{pedidoEstoque.codCliente},
+                    #{pedidoEstoque.data},#{pedidoEstoque.statusId},#{pedidoEstoque.isSaida}))
+        SELECT * INTO temp TABLE temp_pedido FROM cte_pedido;
+
+        UPDATE pedido_estoque a SET
+        filialid      =  t_filialId,
+        codcliente    =  t_codCliente,
+        data          =  t_data,
+        status        =  t_status,
+        issaida       =  t_isSaida
+        FROM temp_pedido WHERE
+        a.id = t_id;
+
+        INSERT INTO pedido_estoque(filialid,codcliente,data,status,issaida)
+        SELECT t_filialId,t_codCliente,t_data,t_status,t_isSaida FROM
+        temp_pedido WHERE t_id IS NULL OR t_id = 0;
+
+        DROP TABLE temp_pedido;
+    </insert>
+
+    <insert id="upsertItemWithList">
+        BEGIN TRANSACTION;
+        WITH cte_itens(t_id, t_pedidoid, t_produtoid, t_quantidade, t_valorunitario, t_valortotal)
+        AS (VALUES
+        <foreach collection="itens" item="item" index="index" separator=",">
+            (CAST (#{item.id} AS int4),#{item.pedidoEstoque.id},#{item.produto.id},
+            #{item.quantidade},#{item.valorUnitario},#{item.valorTotal})
+        </foreach>
+        )
+        SELECT * INTO temp TABLE temp_itens FROM cte_itens;
+
+        UPDATE item_pedido_estoque a SET
+        pedidoid       =  t_pedidoid,
+        produtoid      =  t_produtoid,
+        quantidade     =  t_quantidade,
+        valorunitario  =  t_valorunitario,
+        valortotal     =  t_valortotal
+        FROM temp_itens WHERE
+        a.id = t_id;
+
+        INSERT INTO item_pedido_estoque(pedidoid,produtoid,quantidade,valorunitario,valortotal)
+        SELECT t_pedidoid,t_produtoid,t_quantidade,t_valorunitario,t_valortotal FROM
+        temp_itens WHERE t_id IS NULL OR t_id = 0;
+
+        DROP TABLE temp_itens;
+        COMMIT TRANSACTION;
+    </insert>
+
+    <resultMap id="PedidoCompleto" type="br.com.ithappens.model.PedidoEstoque">
+
+        <result column="ped_id"            property="id"/>
+        <result column="ped_codcliente"    property="codCliente"/>
+        <result column="ped_data"          property="data"/>
+        <result column="ped_issaida"       property="isSaida"/>
+        <result column="ped_status"        property="statusId"/>
+
+        <result column="fil_id"            property="filial.id"/>
+        <result column="fil_descricao"     property="filial.razaoSocial"/>
+
+        <collection property="itens" ofType="br.com.ithappens.model.ItemPedidoEstoque" column="ped.id">
+            <result column="item_id"               property="id"/>
+            <result column="item_quantidade"       property="quantidade"/>
+            <result column="item_valorunitario"    property="valorUnitario"/>
+            <result column="item_valortotal"       property="valorTotal"/>
+            <result column="ped_id"                property="pedidoEstoque.id"/>
+
+            <result column="prod_id"               property="produto.id"/>
+            <result column="prod_descrical"        property="produto.descricao"/>
+            <result column="prod_precounitario"    property="produto.precoUnitario"/>
+        </collection>
+    </resultMap>
+
+    <select id="recuperarPedidoCompletoPorId" resultMap="PedidoCompleto" useCache="false">
+        select
+            ped.id AS ped_id,
+            ped.codcliente AS ped_codcliente,
+            ped.data AS ped_data,
+            ped.status AS ped_status,
+            ped.issaida AS ped_issaida,
+            fil.id AS fil_id,
+            fil.descricao AS fil_descricao,
+            item.id AS item_id,
+            item.quantidade AS item_quantidade,
+            item.valorunitario AS item_valorunitario,
+            item.valortotal AS item_valortotal,
+            prod.id AS prod_id,
+            prod.descrical AS prod_descrical,
+            prod.precounitario AS prod_precounitario
+        from pedido_estoque ped
+        left join filial fil on fil.id = ped.filialid
+        left join item_pedido_estoque item on item.pedidoid = ped.id
+        left join produto prod on prod.id = item.produtoid
+        where ped.id = #{pedidoId}
+    </select>
+
+    <update id="atualizarItemPedido" parameterType="br.com.ithappens.model.ItemPedidoEstoque">
+        UPDATE item_pedido_estoque SET pedidoid = #{item.pedidoEstoque.id}, produtoid = #{item.produto.id},
+        quantidade = #{item.quantidade},
+         valorunitario = #{item.valorUnitario}, valortotal = valorunitario * quantidade
+        WHERE id = #{item.id}
+    </update>
+
+    <insert id="inserirItemPedido" useGeneratedKeys="true" keyProperty="item.id" keyColumn="id">
+        INSERT INTO item_pedido_estoque(pedidoid,produtoid,quantidade,valorunitario,valortotal)
+        VALUES (#{item.pedidoEstoque.id},#{item.produto.id},#{item.quantidade},#{item.valorUnitario},#{item.valorTotal})
+    </insert>
+
+    <resultMap id="Pedido" type="br.com.ithappens.model.PedidoEstoque">
+        <result column="ped_id"            property="id"/>
+        <result column="ped_codcliente"    property="codCliente"/>
+        <result column="ped_data"          property="data"/>
+        <result column="ped_issaida"       property="isSaida"/>
+        <result column="ped_status"        property="statusId"/>
+        <result column="fil_id"            property="filial.id"/>
+        <result column="fil_descricao"     property="filial.razaoSocial"/>
+    </resultMap>
+
+    <select id="recuperarPedidoPorId" resultMap="Pedido">
+        select
+            ped.id AS ped_id,
+            ped.codcliente AS ped_codcliente,
+            ped.data AS ped_data,
+            ped.status AS ped_status,
+            ped.issaida AS ped_issaida,
+            fil.id AS fil_id,
+            fil.descricao AS fil_descricao
+        from pedido_estoque ped
+                 inner join filial fil on fil.id = ped.filialid
+        where ped.id = #{pedidoId}
+    </select>
+
+    <resultMap id="PedidoItem" type="br.com.ithappens.model.ItemPedidoEstoque">
+        <result column="item_id"            property="id"/>
+        <result column="item_pedidoid"      property="pedidoEstoque.id"/>
+        <result column="item_quantidade"    property="quantidade"/>
+        <result column="item_valorunitario" property="valorUnitario"/>
+        <result column="item_valortotal"    property="valorTotal"/>
+
+        <result column="prod_id"            property="produto.id"/>
+        <result column="prod_descricao"     property="produto.descricao"/>
+        <result column="prod_precounitario" property="produto.precoUnitario"/>
+    </resultMap>
+
+    <select id="recuperarItensPedidoEstoque" resultMap="PedidoItem">
+        select
+            item.id as item_id,
+            item.pedidoid as item_pedidoid,
+            item.quantidade as item_quantidade,
+            item.valorunitario as item_valorunitario,
+            item.valortotal as item_valortotal,
+            prod.id as prod_id,
+            prod.descrical as prod_descricao,
+            prod.precounitario as prod_precounitario
+        from item_pedido_estoque item
+                 inner join produto prod on prod.id = item.produtoid
+        where item.pedidoid = #{pedidoId}
+    </select>
+</mapper>

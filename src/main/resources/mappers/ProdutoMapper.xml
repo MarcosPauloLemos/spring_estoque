@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="br.com.ithappens.mapper.ProdutoMapper">
+
+    <resultMap id="Produto" type="br.com.ithappens.model.Produto">
+        <result column="id"               property="id"/>
+        <result column="descrical"        property="descricao"/>
+        <result column="precounitario"    property="precoUnitario"/>
+    </resultMap>
+
+    <select id="recuperarProdutoPorId" resultMap="Produto">
+        select id,descrical,precounitario from produto where id = #{produtoId}
+    </select>
+</mapper>

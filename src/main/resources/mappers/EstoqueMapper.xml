@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="br.com.ithappens.mapper.EstoqueMapper">
+
+    <resultMap id="Estoque" type="br.com.ithappens.model.Estoque">
+        <result column="id"            property="id"/>
+        <result column="filialid"      property="filial.id"/>
+        <result column="produtoid"     property="produto.id"/>
+        <result column="quantidade"    property="quantidade"/>
+    </resultMap>
+
+    <update id="atualizarEstoque">
+        UPDATE  estoque SET filialid = #{estoque.filial.id},produtoid = #{estoque.produto.id}
+        ,quantidade = #{estoque.quantidade}
+        WHERE id = #{estoque.id}
+    </update>
+
+    <insert id="inserirEstoque">
+        INSERT INTO estoque(filialid,produtoid,quantidade) VALUES
+        (#{estoque.filial.id},#{estoque.produto.id},#{estoque.quantidade})
+    </insert>
+
+    <select id="recuperarEstoque" resultMap="Estoque">
+        SELECT id,filialid,produtoid,quantidade FROM estoque
+        WHERE filialid = #{filialId} AND produtoId = #{produtoId}
+    </select>
+
+    <insert id="upsert">
+        BEGIN TRANSACTION;
+        WITH cte_estoque(t_id, t_filialId, t_produtoid, t_quantidade)
+        AS (VALUES (CAST (#{estoque.id} AS int4),#{estoque.filial.id},#{estoque.produto.id},
+                    #{pedidoEstoque.quantidade}))
+        SELECT * INTO temp TABLE temp_estoque FROM cte_estoque;
+
+        UPDATE estoque a SET
+        filialid      =  t_filialId,
+        produtoid     =  t_produtoid,
+        quantidade    =  t_quantidade
+        FROM temp_estoque WHERE
+        a.id = t_id;
+
+        INSERT INTO estoque(filialId, produtoid, quantidade)
+        SELECT t_filialId, t_produtoid, t_quantidade FROM
+        temp_estoque WHERE t_id IS NULL OR t_id = 0;
+
+        DROP TABLE temp_estoque;
+        COMMIT TRANSACTION;
+    </insert>
+</mapper>
